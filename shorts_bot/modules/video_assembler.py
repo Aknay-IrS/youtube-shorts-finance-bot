@@ -17,9 +17,10 @@ import textwrap
 import numpy as np
 from moviepy.editor import (
     AudioFileClip, ColorClip, CompositeVideoClip,
-    TextClip, VideoFileClip, concatenate_videoclips,
-    crop, resize
+    TextClip, VideoFileClip, concatenate_videoclips
 )
+from moviepy.video.fx.resize import resize
+from moviepy.video.fx.crop import crop
 
 import config
 
