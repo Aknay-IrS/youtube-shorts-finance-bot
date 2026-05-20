@@ -18,8 +18,8 @@ import numpy as np
 from moviepy.editor import (
     AudioFileClip, ColorClip, CompositeVideoClip,
     TextClip, VideoFileClip, concatenate_videoclips,
+    crop, resize
 )
-from moviepy.video.fx.all import crop, resize
 
 import config
 
