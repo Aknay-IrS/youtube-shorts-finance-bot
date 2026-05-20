@@ -38,8 +38,8 @@ async def _generate_async(text: str, output_path: str) -> list[dict]:
         elif chunk["type"] == "WordBoundary":
             timings.append({
                 "word":     chunk["text"],
-                "start_ms": chunk["offset"] // 10000,   # convert to ms
-                "end_ms":   (chunk["offset"] + chunk["duration"]) // 10000,
+                "start_ms": chunk["offset"] // 10000,
+                "end_ms":   (chunk["offset"] + chunk.get("duration", 200000)) // 10000,
             })
 
     # Write audio file
