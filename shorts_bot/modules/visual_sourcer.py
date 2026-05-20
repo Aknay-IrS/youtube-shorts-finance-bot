@@ -17,12 +17,12 @@ PIXABAY_KEY = os.environ.get("PIXABAY_API_KEY", "55951851-7282cb13bfe0431ff6400f
 PIXABAY_URL = "https://pixabay.com/api/videos/"
 
 FALLBACK_QUERIES = [
-    "money",
-    "finance",
-    "business",
-    "india city",
-    "smartphone",
-    "success",
+    "animals",
+    "wildlife",
+    "ocean animals",
+    "cute animals",
+    "wild animals",
+    "nature",
 ]
 
 
