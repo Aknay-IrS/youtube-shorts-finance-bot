@@ -37,7 +37,7 @@ def build_background_video(clip_paths, total_duration, output_path):
         # Generate a dark blue background
         cmd = [
             'ffmpeg', '-y', '-f', 'lavfi',
-            '-i', f'color=c=0x0f1a2e:size={W}x{H}:duration={total_duration}:rate={config.VIDEO_FPS}',
+            '-i', f'color=c=0x0d1f3c:size={W}x{H}:duration={total_duration}:rate={config.VIDEO_FPS}',
             '-c:v', 'libx264', '-preset', 'fast', '-crf', '28',
             output_path
         ]
@@ -54,12 +54,18 @@ def build_background_video(clip_paths, total_duration, output_path):
                 f.write(f"file '{os.path.abspath(clip)}'\n")
 
     # Concat and trim to exact duration
+    # Scale: fill the 1080x1920 frame, zoom in to crop, no grey bars
+    vf = (
+        f"scale='if(gt(iw/ih,{W}/{H}),{H}*iw/ih,{W})':'if(gt(iw/ih,{W}/{H}),{H},{W}*ih/iw)',"
+        f"crop={W}:{H},"
+        f"fps={config.VIDEO_FPS}"
+    )
     cmd = [
         'ffmpeg', '-y', '-f', 'concat', '-safe', '0',
         '-i', concat_file,
         '-t', str(total_duration),
-        '-vf', f'scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={config.VIDEO_FPS}',
-        '-c:v', 'libx264', '-preset', 'fast', '-crf', '28',
+        '-vf', vf,
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
         '-an', output_path
     ]
     result = subprocess.run(cmd, capture_output=True, timeout=300)
