@@ -21,8 +21,8 @@ def get_google_trends() -> list[str]:
     try:
         pt = TrendReq(hl="en-IN", tz=330, timeout=(10, 25))
         keywords = [
-            "mutual fund", "stock market", "personal finance",
-            "how to save money", "investment tips"
+            "funny animal facts", "amazing animals",
+            "wild animals", "animal behavior", "nature facts"
         ]
         pt.build_payload(keywords, cat=7, timeframe="now 1-d", geo="IN")
         related = pt.related_queries()
@@ -72,8 +72,8 @@ def get_youtube_trending_finance() -> list[str]:
 def get_reddit_trending() -> list[str]:
     """Scrape top posts from Indian finance subreddits (no API key needed)."""
     subreddits = [
-        "IndiaInvestments", "personalfinanceindia",
-        "IndianStockMarket", "DalalStreetTalks"
+        "interestingasfuck", "Awwducational",
+        "NatureIsFuckingLit", "woahdude"
     ]
     topics = []
     headers = {"User-Agent": "Mozilla/5.0 (FinanceBot/1.0)"}
