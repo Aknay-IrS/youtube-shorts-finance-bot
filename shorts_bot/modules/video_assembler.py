@@ -206,7 +206,7 @@ def assemble_video(
 
     # Load voice audio
     audio      = AudioFileClip(audio_path)
-    total_dur  = audio.duration + 0.5   # tiny buffer at end
+    total_dur  = audio.duration + 1.5   # buffer to avoid duration mismatch
 
     # Build background
     log.info("Building background...")
@@ -223,8 +223,9 @@ def assemble_video(
     # Compose everything
     all_layers = [background] + caption_clips + [title_clip, cta_clip]
     final = CompositeVideoClip(all_layers, size=(W, H))
+    audio = audio.set_duration(audio.duration)
     final = final.set_audio(audio)
-    final = final.set_duration(total_dur)
+    final = final.set_duration(audio.duration + 1.0)
 
     # Render
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
