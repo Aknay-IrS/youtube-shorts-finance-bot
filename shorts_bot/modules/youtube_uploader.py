@@ -47,6 +47,17 @@ def get_authenticated_service():
 
     log.info(f"Token keys: {list(token_data.keys())}")
 
+    # Unwrap if wrapped in "web" or "installed" key
+    if "web" in token_data:
+        token_data = token_data["web"]
+    elif "installed" in token_data:
+        token_data = token_data["installed"]
+
+    log.info(f"Unwrapped token keys: {list(token_data.keys())}")
+
+    if not token_data.get("refresh_token"):
+        raise ValueError(f"token.json is missing refresh_token. Keys found: {list(token_data.keys())}. Please update YOUTUBE_TOKEN_JSON secret with the correct token.")
+
     # Build credentials directly from our token format
     creds = Credentials(
         token=token_data.get("token") or token_data.get("access_token"),
