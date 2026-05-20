@@ -6,7 +6,7 @@ load_dotenv()
 # ── API Keys (set these in .env) ──────────────────────────────────────────────
 CLAUDE_API_KEY      = os.getenv("CLAUDE_API_KEY", "")
 YOUTUBE_CLIENT_FILE = os.getenv("YOUTUBE_CLIENT_FILE", "client_secret.json")
-PEXELS_API_KEY      = os.getenv("PEXELS_API_KEY", "")
+PEXELS_API_KEY      = os.getenv("PEXELS_API_KEY", "aWfRW3CjhYB8j0iPHXUTB7lw1zRZpndnbeTWeZxqgHZtSOQ4ORYEaXC6")
 
 # ── Channel Settings ──────────────────────────────────────────────────────────
 NICHE               = "finance and money tips India"
@@ -27,7 +27,7 @@ VOICE_RATE          = "+5%"      # slightly faster for Shorts energy
 VOICE_PITCH         = "+0Hz"
 
 # ── Text Overlay Settings ─────────────────────────────────────────────────────
-FONT_SIZE_CAPTION   = 62
+FONT_SIZE_CAPTION   = 80
 FONT_COLOR          = "white"
 CAPTION_STROKE      = 4          # outline thickness for readability
 CAPTION_MAX_WORDS   = 4          # words shown at a time (caption style)
