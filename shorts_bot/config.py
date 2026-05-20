@@ -7,6 +7,7 @@ load_dotenv()
 CLAUDE_API_KEY      = os.getenv("CLAUDE_API_KEY", "")
 YOUTUBE_CLIENT_FILE = os.getenv("YOUTUBE_CLIENT_FILE", "client_secret.json")
 PEXELS_API_KEY      = os.getenv("PEXELS_API_KEY", "aWfRW3CjhYB8j0iPHXUTB7lw1zRZpndnbeTWeZxqgHZtSOQ4ORYEaXC6")
+PIXABAY_API_KEY     = os.getenv("PIXABAY_API_KEY", "55951851-7282cb13bfe0431ff6400f2a0")
 
 # ── Channel Settings ──────────────────────────────────────────────────────────
 NICHE               = "finance and money tips India"
