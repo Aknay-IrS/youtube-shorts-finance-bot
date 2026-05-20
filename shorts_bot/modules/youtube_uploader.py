@@ -1,28 +1,12 @@
 """
-youtube_uploader.py
-Uploads the rendered Short to YouTube using the Data API v3.
-Handles OAuth2 authentication with token refresh.
-
-Setup (one-time):
-  1. Go to console.cloud.google.com
-  2. Create project → Enable YouTube Data API v3
-  3. OAuth2 credentials → Download client_secret.json
-  4. Run: python modules/youtube_uploader.py --auth
-  5. Paste the token.json path in .env
+youtube_uploader.py - Uploads Shorts to YouTube using OAuth2.
 """
-
-import argparse
 import json
 import logging
 import os
-import pathlib
-import pickle
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
 
-from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
@@ -31,71 +15,75 @@ import config
 
 log = logging.getLogger(__name__)
 
-SCOPES          = ["https://www.googleapis.com/auth/youtube.upload",
-                   "https://www.googleapis.com/auth/youtube"]
-TOKEN_FILE      = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "token.json")
-IST             = ZoneInfo("Asia/Kolkata")
+SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube"
+]
 
+def _get_token_path():
+    """Find token.json - check current dir and parent dirs."""
+    candidates = [
+        "token.json",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "token.json"),
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "token.json"),
+    ]
+    for p in candidates:
+        p = os.path.normpath(p)
+        if os.path.exists(p):
+            log.info(f"Found token.json at: {p}")
+            return p
+    # Default
+    return os.path.normpath(candidates[1])
 
 def get_authenticated_service():
-    """Get or refresh YouTube API credentials."""
-    creds = None
+    """Load credentials from token.json and build YouTube service."""
+    token_path = _get_token_path()
 
-    if os.path.exists(TOKEN_FILE):
-        creds = Credentials.from_authorized_user_file(TOKEN_FILE, SCOPES)
+    if not os.path.exists(token_path):
+        raise FileNotFoundError(f"token.json not found. Looked at: {token_path}")
 
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            log.info("Refreshing YouTube token...")
+    with open(token_path) as f:
+        token_data = json.load(f)
+
+    log.info(f"Token keys: {list(token_data.keys())}")
+
+    # Build credentials directly from our token format
+    creds = Credentials(
+        token=token_data.get("token") or token_data.get("access_token"),
+        refresh_token=token_data.get("refresh_token"),
+        token_uri=token_data.get("token_uri", "https://oauth2.googleapis.com/token"),
+        client_id=token_data.get("client_id"),
+        client_secret=token_data.get("client_secret"),
+        scopes=token_data.get("scopes", SCOPES)
+    )
+
+    # Refresh if expired
+    if not creds.valid:
+        if creds.refresh_token:
+            log.info("Refreshing token...")
             creds.refresh(Request())
+            # Save refreshed token
+            updated = {
+                "token": creds.token,
+                "refresh_token": creds.refresh_token,
+                "token_uri": creds.token_uri,
+                "client_id": creds.client_id,
+                "client_secret": creds.client_secret,
+                "scopes": list(creds.scopes or SCOPES)
+            }
+            with open(token_path, "w") as f:
+                json.dump(updated, f, indent=2)
         else:
-            log.info("Starting YouTube OAuth2 flow...")
-            flow = InstalledAppFlow.from_client_secrets_file(
-                config.YOUTUBE_CLIENT_FILE, SCOPES
-            )
-            creds = flow.run_local_server(port=0)
-
-        with open(TOKEN_FILE, "w") as f:
-            f.write(creds.to_json())
-        log.info("Token saved to token.json")
+            raise ValueError("Token expired and no refresh_token available.")
 
     return build("youtube", "v3", credentials=creds)
 
 
-def get_next_upload_time() -> str:
-    """
-    Returns the next scheduled upload time in ISO 8601 format.
-    Posts at 7 AM or 7 PM IST — whichever is next.
-    """
-    now = datetime.now(IST)
-    upload_hours = [7, 19]
-
-    for hour in sorted(upload_hours):
-        scheduled = now.replace(hour=hour, minute=0, second=0, microsecond=0)
-        if scheduled > now + timedelta(minutes=5):
-            return scheduled.isoformat()
-
-    # Both times passed today — schedule for 7 AM tomorrow
-    tomorrow = now + timedelta(days=1)
-    scheduled = tomorrow.replace(hour=7, minute=0, second=0, microsecond=0)
-    return scheduled.isoformat()
-
-
-def upload_short(
-    video_path:  str,
-    title:       str,
-    description: str,
-    tags:        list[str],
-    scheduled:   bool = True,
-) -> str | None:
-    """
-    Upload a Short to YouTube.
-    Returns video_id on success, None on failure.
-    """
+def upload_short(video_path, title, description, tags, scheduled=True):
+    """Upload a Short to YouTube. Returns video_id or None."""
     try:
         youtube = get_authenticated_service()
 
-        # Build description with standard footer
         full_description = (
             f"{description}\n\n"
             f"{'─' * 30}\n"
@@ -104,53 +92,32 @@ def upload_short(
             f"{config.YT_SHORTS_TAG}"
         )
 
-        # Body
         body = {
             "snippet": {
-                "title":       title[:100],    # YouTube limit
+                "title": title[:100],
                 "description": full_description[:5000],
-                "tags":        tags[:500],
-                "categoryId":  config.YT_CATEGORY_ID,
+                "tags": tags[:500],
+                "categoryId": config.YT_CATEGORY_ID,
                 "defaultLanguage": "en",
             },
             "status": {
-                "privacyStatus":      config.YT_PRIVACY,
+                "privacyStatus": "public",
                 "selfDeclaredMadeForKids": config.YT_MADE_FOR_KIDS,
             },
         }
 
-        # Schedule if requested
-        if scheduled and config.YT_PRIVACY == "public":
-            publish_at = get_next_upload_time()
-            body["status"]["publishAt"]      = publish_at
-            body["status"]["privacyStatus"]  = "private"   # set private until scheduled time
-            log.info(f"Scheduled for: {publish_at}")
-
-        # Upload
-        media = MediaFileUpload(
-            video_path,
-            mimetype="video/mp4",
-            resumable=True,
-            chunksize=1024 * 1024 * 5,   # 5MB chunks
-        )
-
-        request = youtube.videos().insert(
-            part="snippet,status",
-            body=body,
-            media_body=media,
-        )
+        media = MediaFileUpload(video_path, mimetype="video/mp4", resumable=True, chunksize=5*1024*1024)
+        request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
 
         log.info(f"Uploading: {video_path}")
         response = None
         while response is None:
             status, response = request.next_chunk()
             if status:
-                pct = int(status.progress() * 100)
-                log.info(f"Upload progress: {pct}%")
+                log.info(f"Upload progress: {int(status.progress() * 100)}%")
 
         video_id = response.get("id", "")
-        url = f"https://youtube.com/shorts/{video_id}"
-        log.info(f"✅ Uploaded! {url}")
+        log.info(f"✅ Uploaded! https://youtube.com/shorts/{video_id}")
         return video_id
 
     except HttpError as e:
@@ -161,29 +128,14 @@ def upload_short(
         return None
 
 
-def set_thumbnail(video_id: str, thumbnail_path: str):
-    """Upload custom thumbnail for the video."""
+def set_thumbnail(video_id, thumbnail_path):
+    """Upload custom thumbnail."""
     try:
         youtube = get_authenticated_service()
         youtube.thumbnails().set(
             videoId=video_id,
-            media_body=MediaFileUpload(thumbnail_path, mimetype="image/jpeg"),
+            media_body=MediaFileUpload(thumbnail_path, mimetype="image/jpeg")
         ).execute()
         log.info(f"Thumbnail set for {video_id}")
     except Exception as e:
         log.warning(f"Thumbnail upload failed: {e}")
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--auth", action="store_true",
-                        help="Run OAuth2 authentication flow")
-    args = parser.parse_args()
-
-    logging.basicConfig(level=logging.INFO)
-
-    if args.auth:
-        svc = get_authenticated_service()
-        print("✅ YouTube authentication successful! token.json saved.")
-    else:
-        print("Run with --auth to authenticate YouTube account.")
