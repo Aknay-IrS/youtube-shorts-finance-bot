@@ -1,0 +1,52 @@
+name: Daily YouTube Shorts
+on:
+  schedule:
+    - cron: "30 1 * * *"
+    - cron: "30 13 * * *"
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Custom topic"
+        required: false
+        default: ""
+      count:
+        description: "Number of Shorts"
+        required: false
+        default: "1"
+jobs:
+  make-shorts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+          cache: "pip"
+      - name: Install system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-liberation imagemagick libmagickwand-dev --no-install-recommends
+          sudo sed -i 's/rights="none" pattern="@\*"/rights="read|write" pattern="@*"/' /etc/ImageMagick-6/policy.xml || true
+      - run: pip install -r shorts_bot/requirements.txt
+      - name: Restore YouTube token
+        run: echo '${{ secrets.YOUTUBE_TOKEN_JSON }}' > token.json
+      - name: Run pipeline
+        env:
+          CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
+          PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          YOUTUBE_CLIENT_FILE: client_secret.json
+        run: |
+          echo '${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}' > client_secret.json
+          cd shorts_bot
+          TOPIC="${{ github.event.inputs.topic }}"
+          COUNT="${{ github.event.inputs.count || '1' }}"
+          if [ -n "$TOPIC" ]; then python main.py --count $COUNT --topic "$TOPIC"; else python main.py --count $COUNT; fi
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: shorts-output-${{ github.run_id }}
+          path: |
+            shorts_bot/output/
+            pipeline.log
+          retention-days: 7
