@@ -118,13 +118,17 @@ def make_short(
     # ── Step 6: Thumbnail ─────────────────────────────────────────────────────
     log.info("STEP 6: Thumbnail Generation")
     thumb_path = str(work_dir / "thumbnail.jpg")
-    generate_thumbnail(
-        title        = script["title"],
-        hook_text    = script["hook"][:80],
-        output_path  = thumb_path,
-        pexels_query = script.get("pexels_search", "money india"),
-    )
-    result["thumbnail_path"] = thumb_path
+    try:
+        generate_thumbnail(
+            title        = script["title"],
+            hook_text    = script["hook"][:80],
+            output_path  = thumb_path,
+            pexels_query = script.get("pexels_search", "money india"),
+        )
+        result["thumbnail_path"] = thumb_path
+    except Exception as thumb_err:
+        log.warning(f"Thumbnail failed (skipping): {thumb_err}")
+        thumb_path = None
 
     if no_upload:
         log.info("--no-upload flag set — skipping YouTube upload")
@@ -143,7 +147,8 @@ def make_short(
     )
 
     if video_id:
-        set_thumbnail(video_id, thumb_path)
+        if thumb_path and os.path.exists(thumb_path):
+            set_thumbnail(video_id, thumb_path)
         result["video_id"]  = video_id
         result["video_url"] = f"https://youtube.com/shorts/{video_id}"
         result["status"]    = "uploaded"
