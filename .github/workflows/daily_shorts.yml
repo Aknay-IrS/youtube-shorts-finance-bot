@@ -30,14 +30,15 @@ jobs:
           sudo sed -i 's/rights="none" pattern="@\*"/rights="read|write" pattern="@*"/' /etc/ImageMagick-6/policy.xml || true
       - run: pip install -r shorts_bot/requirements.txt
       - name: Restore YouTube token
-        run: echo '${{ secrets.YOUTUBE_TOKEN_JSON }}' > token.json
+        run: echo 'token will be written in pipeline step' > /dev/null
       - name: Run pipeline
         env:
           CLAUDE_API_KEY: ${{ secrets.CLAUDE_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
           YOUTUBE_CLIENT_FILE: client_secret.json
         run: |
-          echo '${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}' > client_secret.json
+          echo '${{ secrets.YOUTUBE_TOKEN_JSON }}' > shorts_bot/token.json
+          echo '${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}' > shorts_bot/client_secret.json
           cd shorts_bot
           COUNT="${{ github.event.inputs.count || '1' }}"
           TOPIC="${{ github.event.inputs.topic }}"
