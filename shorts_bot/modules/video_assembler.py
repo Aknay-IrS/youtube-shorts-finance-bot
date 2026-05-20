@@ -88,7 +88,7 @@ def add_overlay_and_audio(bg_video, audio_path, title, captions, total_duration,
     if ascii_title:
         wrapped = '\n'.join(textwrap.wrap(ascii_title, width=20))
         filters.append(
-            f"drawtext=text='{wrapped}':fontsize=48:fontcolor=white:borderw=3:bordercolor=black:"
+            f"drawtext=text='{wrapped}':fontsize=64:fontcolor=white:borderw=4:bordercolor=black:"
             f"x=(w-text_w)/2:y=100:enable='between(t,0,3.5)'"
         )
     
@@ -106,14 +106,14 @@ def add_overlay_and_audio(bg_video, audio_path, title, captions, total_duration,
         if len(ascii_text) > 20:
             ascii_text = ascii_text[:20]
         filters.append(
-            f"drawtext=text='{ascii_text}':fontsize=58:fontcolor=white:borderw=4:bordercolor=black:"
+            f"drawtext=text='{ascii_text}':fontsize=80:fontcolor=white:borderw=5:bordercolor=black:"
             f"x=(w-text_w)/2:y=(h*0.65):enable='between(t,{start:.2f},{end:.2f})'"
         )
     
     # CTA (last 4 seconds)
     cta_start = max(0, total_duration - 4)
     filters.append(
-        f"drawtext=text='FOLLOW for daily tips!':fontsize=50:fontcolor=yellow:borderw=3:bordercolor=black:"
+        f"drawtext=text='FOLLOW for daily tips!':fontsize=60:fontcolor=yellow:borderw=4:bordercolor=black:"
         f"x=(w-text_w)/2:y=(h-200):enable='between(t,{cta_start:.2f},{total_duration:.2f})'"
     )
     
