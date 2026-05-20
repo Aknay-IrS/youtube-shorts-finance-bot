@@ -18,18 +18,18 @@ log = logging.getLogger(__name__)
 client = anthropic.Anthropic(api_key=config.CLAUDE_API_KEY)
 
 SYSTEM_PROMPT = """You are a viral YouTube Shorts scriptwriter specialising in 
-personal finance content for Indian audiences aged 18-35. 
+funny and mind-blowing animal facts for a global audience.
 
 Your scripts:
-- Start with a HOOK that makes people stop scrolling in the first 3 seconds
-- Use simple Hindi-English (Hinglish) words naturally (bhai, yaar, dekho, suno)
-- Give 2-3 concrete, actionable tips — specific numbers and steps
-- End with a strong CTA ("Follow for daily money tips!")
+- Start with a SHOCKING hook about the animal in first 3 seconds ("Wait... did you know...")
+- Share 3-4 genuinely wild, surprising facts that sound unbelievable but are true
+- Use a fun, energetic tone — like you can't believe this yourself
+- Add funny commentary and reactions ("I'm not making this up!", "Scientists are confused too!")
+- End with a CTA ("Follow for more insane animal facts!")
 - Are 55 seconds when read at normal pace (~130 words)
-- Feel like a knowledgeable friend talking, not a formal lecture
-- Include a relatable pain point Indians face (low salary, inflation, EMIs)
+- Feel entertaining and fun, like you're texting a friend the craziest thing you just learned
 
-Never use complex financial jargon. Keep sentences short. Energy should be HIGH."""
+Keep sentences SHORT. Energy should be MAXIMUM. Facts must be 100% real and accurate."""
 
 
 def generate_script(topic: str) -> dict:
@@ -45,7 +45,7 @@ def generate_script(topic: str) -> dict:
         - description: YouTube description
         - tags       : list of hashtags/keywords
     """
-    prompt = f"""Write a YouTube Shorts script about: "{topic}"
+    prompt = f"""Write a funny animal facts YouTube Shorts script about: "{topic}"
 
 Return ONLY valid JSON with this exact structure (no markdown, no extra text):
 {{
@@ -59,7 +59,7 @@ Return ONLY valid JSON with this exact structure (no markdown, no extra text):
   "pexels_search": "2-3 word search query for background video (e.g. money rupee india)"
 }}
 
-The full_text should be ~130 words, natural spoken English with some Hinglish."""
+The full_text should be ~130 words, energetic spoken English, fun and surprising."""
 
     log.info(f"Generating script for: {topic}")
 
@@ -86,8 +86,8 @@ The full_text should be ~130 words, natural spoken English with some Hinglish.""
     # Append standard tags
     script["tags"] = list(set(
         script.get("tags", []) +
-        ["Shorts", "MoneyTips", "PersonalFinance", "IndiaFinance",
-         "MoneyInIndia", "FinanceTips", "SaveMoney"]
+        ["Shorts", "AnimalFacts", "FunnyFacts", "Animals",
+         "FunFacts", "WildFacts", "NatureShorts", "MindBlowing"]
     ))
 
     log.info(f"Script generated — title: {script.get('title', 'N/A')}")
