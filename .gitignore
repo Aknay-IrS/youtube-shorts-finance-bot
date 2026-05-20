@@ -1,0 +1,17 @@
+# Secrets
+.env
+token.json
+client_secret.json
+
+# Output
+output/
+pipeline.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS
+.DS_Store
+Thumbs.db
