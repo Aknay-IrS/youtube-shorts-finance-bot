@@ -1,252 +1,164 @@
 """
-video_assembler.py
-Assembles the final YouTube Short from:
-  - Stock video clips (Pexels)
-  - AI voiceover (edge-tts MP3)
-  - Auto-captions (word-level timing)
-  - Dark gradient overlay for text readability
-  - Optional background music
-
-Output: 1080x1920, H.264, ready to upload.
+video_assembler.py - Uses FFmpeg directly to avoid MoviePy audio bugs.
 """
-
 import logging
 import os
+import subprocess
 import textwrap
-
-import numpy as np
-from moviepy.editor import (
-    AudioFileClip, ColorClip, CompositeVideoClip,
-    TextClip, VideoFileClip, concatenate_videoclips
-)
-from moviepy.video.fx.resize import resize
-from moviepy.video.fx.crop import crop
 
 import config
 
 log = logging.getLogger(__name__)
 
-W = config.VIDEO_WIDTH    # 1080
-H = config.VIDEO_HEIGHT   # 1920
+W = config.VIDEO_WIDTH
+H = config.VIDEO_HEIGHT
 
 
-def load_and_prep_clip(path: str, target_duration: float = None) -> VideoFileClip:
-    """Load a clip, crop to 9:16, resize to 1080x1920."""
+def get_audio_duration_ffprobe(audio_path):
+    """Get exact audio duration using ffprobe."""
     try:
-        clip = VideoFileClip(path, audio=False)
-
-        # Crop to 9:16 aspect ratio
-        clip_ratio = clip.w / clip.h
-        target_ratio = W / H
-
-        if clip_ratio > target_ratio:
-            # Clip is wider than 9:16 — crop sides
-            new_w = int(clip.h * target_ratio)
-            x_center = clip.w / 2
-            clip = crop(clip, width=new_w, x_center=x_center)
-        else:
-            # Clip is taller than 9:16 — crop top/bottom
-            new_h = int(clip.w / target_ratio)
-            y_center = clip.h / 2
-            clip = crop(clip, height=new_h, y_center=y_center)
-
-        # Resize to 1080x1920
-        clip = resize(clip, (W, H))
-
-        # Loop if shorter than needed
-        if target_duration and clip.duration < target_duration:
-            loops = int(np.ceil(target_duration / clip.duration)) + 1
-            from moviepy.editor import concatenate_videoclips as cc
-            clip = cc([clip] * loops).subclip(0, target_duration)
-
-        return clip
-
+        result = subprocess.run([
+            'ffprobe', '-v', 'error', '-show_entries', 'format=duration',
+            '-of', 'default=noprint_wrappers=1:nokey=1', audio_path
+        ], capture_output=True, text=True, timeout=30)
+        return float(result.stdout.strip())
     except Exception as e:
-        log.error(f"Failed to load clip {path}: {e}")
-        # Return a black clip as fallback
-        return ColorClip((W, H), col=[20, 20, 20],
-                         duration=target_duration or 10)
+        log.warning(f"ffprobe failed: {e}, using mutagen")
+        try:
+            from mutagen.mp3 import MP3
+            return MP3(audio_path).info.length
+        except Exception:
+            return 55.0
 
 
-def build_background(clip_paths: list[str], total_duration: float) -> CompositeVideoClip:
-    """
-    Concatenate clips to fill total_duration.
-    Adds dark gradient overlay for text readability.
-    """
+def build_background_video(clip_paths, total_duration, output_path):
+    """Concatenate and loop clips to fill duration using FFmpeg."""
     if not clip_paths:
-        # Fallback: dark background
-        return ColorClip((W, H), col=[15, 15, 30], duration=total_duration)
+        # Generate a dark blue background
+        cmd = [
+            'ffmpeg', '-y', '-f', 'lavfi',
+            '-i', f'color=c=0x0f1a2e:size={W}x{H}:duration={total_duration}:rate={config.VIDEO_FPS}',
+            '-c:v', 'libx264', '-preset', 'fast', '-crf', '28',
+            output_path
+        ]
+        subprocess.run(cmd, capture_output=True, timeout=120)
+        return output_path
 
-    # Load and trim clips
-    clips = []
-    remaining = total_duration
+    # Create concat list - loop clips to fill duration
+    concat_file = output_path + '_concat.txt'
+    with open(concat_file, 'w') as f:
+        # Repeat clips enough times to cover duration
+        repeats = int(total_duration / 5) + 3
+        for _ in range(repeats):
+            for clip in clip_paths:
+                f.write(f"file '{os.path.abspath(clip)}'\n")
 
-    for path in clip_paths * 3:   # cycle through clips if needed
-        if remaining <= 0:
-            break
-        duration = min(remaining, 12)   # max 12s per clip
-        c = load_and_prep_clip(path, target_duration=duration)
-        c = c.subclip(0, min(duration, c.duration))
-        clips.append(c)
-        remaining -= c.duration
-
-    bg = concatenate_videoclips(clips, method="compose")
-    bg = bg.subclip(0, total_duration)
-
-    # Dark semi-transparent overlay (60% opacity) — improves text readability
-    overlay = ColorClip((W, H), col=[0, 0, 0], duration=total_duration)
-    overlay = overlay.set_opacity(0.55)
-
-    return CompositeVideoClip([bg, overlay])
-
-
-def make_caption_clip(caption: dict, duration_s: float) -> TextClip:
-    """
-    Build a single caption TextClip with white text + black stroke.
-    caption = {text, start_ms, end_ms}
-    """
-    text = caption["text"].upper()
-    start = caption["start_ms"] / 1000
-    end   = caption["end_ms"]   / 1000
-    dur   = max(end - start, 0.1)
-
-    # Wrap long lines
-    wrapped = "\n".join(textwrap.wrap(text, width=14))
-
-    try:
-        txt = TextClip(
-            wrapped,
-            fontsize=config.FONT_SIZE_CAPTION,
-            color=config.FONT_COLOR,
-            font="DejaVu-Sans-Bold",
-            stroke_color="black",
-            stroke_width=config.CAPTION_STROKE,
-            method="caption",
-            size=(W - 80, None),
-            align="center",
-        )
-    except Exception:
-        # Fallback font
-        txt = TextClip(
-            wrapped,
-            fontsize=config.FONT_SIZE_CAPTION,
-            color=config.FONT_COLOR,
-            stroke_color="black",
-            stroke_width=config.CAPTION_STROKE,
-            method="label",
-        )
-
-    # Position: bottom-center (30% from bottom)
-    txt = txt.set_position(("center", H * 0.62))
-    txt = txt.set_start(start).set_duration(dur)
-
-    return txt
-
-
-def make_title_clip(title: str, total_duration: float) -> TextClip:
-    """Top banner with the video title — shows for first 3 seconds."""
-    clean = title.replace("#Shorts", "").strip()
-    wrapped = "\n".join(textwrap.wrap(clean, width=20))
-
-    try:
-        txt = TextClip(
-            wrapped,
-            fontsize=48,
-            color="white",
-            font="DejaVu-Sans-Bold",
-            stroke_color="black",
-            stroke_width=3,
-            method="caption",
-            size=(W - 80, None),
-            align="center",
-        )
-    except Exception:
-        txt = TextClip(wrapped, fontsize=48, color="white", stroke_color="black",
-                       stroke_width=3, method="label")
-
-    txt = txt.set_position(("center", 120))
-    txt = txt.set_start(0).set_duration(min(3.5, total_duration))
-    return txt
-
-
-def make_cta_clip(cta_text: str, total_duration: float) -> TextClip:
-    """Bottom CTA — appears in last 4 seconds."""
-    try:
-        txt = TextClip(
-            "👆 FOLLOW for daily tips!",
-            fontsize=52,
-            color="#FFD700",   # gold
-            font="DejaVu-Sans-Bold",
-            stroke_color="black",
-            stroke_width=3,
-            method="label",
-        )
-    except Exception:
-        txt = TextClip("FOLLOW for daily tips!", fontsize=52, color="yellow",
-                       stroke_color="black", stroke_width=3, method="label")
-
-    start = max(0, total_duration - 4)
-    txt = txt.set_position(("center", H - 200))
-    txt = txt.set_start(start).set_duration(4)
-    return txt
-
-
-def assemble_video(
-    clip_paths:  list[str],
-    audio_path:  str,
-    captions:    list[dict],
-    title:       str,
-    output_path: str,
-) -> str:
-    """
-    Master assembly function.
-    Returns path to final rendered video.
-    """
-    log.info("Assembling video...")
-
-    # Load voice audio
-    audio      = AudioFileClip(audio_path)
-    total_dur  = audio.duration + 1.5   # buffer to avoid duration mismatch
-
-    # Build background
-    log.info("Building background...")
-    background = build_background(clip_paths, total_dur)
-
-    # Build caption clips
-    log.info(f"Building {len(captions)} caption clips...")
-    caption_clips = [make_caption_clip(c, total_dur) for c in captions]
-
-    # Title + CTA
-    title_clip = make_title_clip(title, total_dur)
-    cta_clip   = make_cta_clip("Follow for more!", total_dur)
-
-    # Compose everything
-    all_layers = [background] + caption_clips + [title_clip, cta_clip]
-    final = CompositeVideoClip(all_layers, size=(W, H))
-    audio = audio.set_duration(audio.duration)
-    final = final.set_audio(audio)
-    final = final.set_duration(audio.duration + 1.0)
-
-    # Render
-    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-    log.info(f"Rendering to {output_path}...")
-
-    final.write_videofile(
-        output_path,
-        fps=config.VIDEO_FPS,
-        codec="libx264",
-        audio_codec="aac",
-        bitrate=config.VIDEO_BITRATE,
-        threads=4,
-        logger=None,   # suppress verbose moviepy output
-        preset="fast",
-    )
-
-    log.info(f"Video ready: {output_path}")
+    # Concat and trim to exact duration
+    cmd = [
+        'ffmpeg', '-y', '-f', 'concat', '-safe', '0',
+        '-i', concat_file,
+        '-t', str(total_duration),
+        '-vf', f'scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={config.VIDEO_FPS}',
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '28',
+        '-an', output_path
+    ]
+    result = subprocess.run(cmd, capture_output=True, timeout=300)
+    if os.path.exists(concat_file):
+        os.remove(concat_file)
+    if result.returncode != 0:
+        log.error(f"FFmpeg concat failed: {result.stderr.decode()[:500]}")
+        # Fallback to solid color
+        return build_background_video([], total_duration, output_path)
     return output_path
 
 
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    print("Video assembler ready.")
-    print(f"Output size: {W}x{H} @ {config.VIDEO_FPS}fps")
+def add_overlay_and_audio(bg_video, audio_path, title, captions, total_duration, output_path):
+    """Add dark overlay, title text, captions, and audio using FFmpeg."""
+    
+    # Build drawtext filters
+    filters = []
+    
+    # Dark overlay
+    filters.append(f'drawbox=x=0:y=0:w={W}:h={H}:color=black@0.55:t=fill')
+    
+    # Title text (top, first 3.5 seconds)
+    clean_title = title.replace("'", "").replace('"', '').replace(':', ' ').replace('#', '')
+    # Keep only ASCII for FFmpeg drawtext
+    ascii_title = ''.join(c if ord(c) < 128 else ' ' for c in clean_title).strip()[:50]
+    if ascii_title:
+        wrapped = '\n'.join(textwrap.wrap(ascii_title, width=20))
+        filters.append(
+            f"drawtext=text='{wrapped}':fontsize=48:fontcolor=white:borderw=3:bordercolor=black:"
+            f"x=(w-text_w)/2:y=100:enable='between(t,0,3.5)'"
+        )
+    
+    # Caption text
+    for cap in captions[:30]:  # limit captions
+        start = cap['start_ms'] / 1000
+        end = cap['end_ms'] / 1000
+        if end <= start:
+            end = start + 0.5
+        text = cap['text'].upper().replace("'", "").replace('"', '')
+        ascii_text = ''.join(c if ord(c) < 128 else ' ' for c in text).strip()
+        if not ascii_text:
+            continue
+        # Wrap long captions
+        if len(ascii_text) > 20:
+            ascii_text = ascii_text[:20]
+        filters.append(
+            f"drawtext=text='{ascii_text}':fontsize=58:fontcolor=white:borderw=4:bordercolor=black:"
+            f"x=(w-text_w)/2:y=(h*0.65):enable='between(t,{start:.2f},{end:.2f})'"
+        )
+    
+    # CTA (last 4 seconds)
+    cta_start = max(0, total_duration - 4)
+    filters.append(
+        f"drawtext=text='FOLLOW for daily tips!':fontsize=50:fontcolor=yellow:borderw=3:bordercolor=black:"
+        f"x=(w-text_w)/2:y=(h-200):enable='between(t,{cta_start:.2f},{total_duration:.2f})'"
+    )
+    
+    vf = ','.join(filters)
+    
+    cmd = [
+        'ffmpeg', '-y',
+        '-i', bg_video,
+        '-i', audio_path,
+        '-vf', vf,
+        '-c:v', 'libx264', '-preset', 'fast', '-crf', '23',
+        '-c:a', 'aac', '-b:a', '128k',
+        '-t', str(total_duration),
+        '-shortest',
+        output_path
+    ]
+    result = subprocess.run(cmd, capture_output=True, timeout=600)
+    if result.returncode != 0:
+        log.error(f"FFmpeg overlay failed: {result.stderr.decode()[:500]}")
+        raise RuntimeError(f"FFmpeg failed: {result.stderr.decode()[:200]}")
+    return output_path
+
+
+def assemble_video(clip_paths, audio_path, captions, title, output_path):
+    """Master assembly function using FFmpeg directly."""
+    log.info("Assembling video with FFmpeg...")
+    
+    os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+    
+    # Get exact duration
+    total_dur = get_audio_duration_ffprobe(audio_path)
+    log.info(f"Audio duration: {total_dur:.2f}s")
+    
+    # Build background
+    bg_path = output_path.replace('.mp4', '_bg.mp4')
+    log.info("Building background...")
+    build_background_video(clip_paths, total_dur + 0.5, bg_path)
+    
+    # Add overlay + audio
+    log.info("Adding text overlays and audio...")
+    add_overlay_and_audio(bg_path, audio_path, title, captions, total_dur, output_path)
+    
+    # Cleanup
+    if os.path.exists(bg_path):
+        os.remove(bg_path)
+    
+    log.info(f"Video ready: {output_path}")
+    return output_path
