@@ -1,8 +1,13 @@
 name: Daily YouTube Shorts
 on:
   schedule:
-    - cron: "30 1 * * *"
-    - cron: "30 13 * * *"
+    - cron: "0 1 * * *"
+    - cron: "0 4 * * *"
+    - cron: "0 7 * * *"
+    - cron: "0 9 * * *"
+    - cron: "0 11 * * *"
+    - cron: "0 13 * * *"
+    - cron: "0 15 * * *"
   workflow_dispatch:
     inputs:
       topic:
