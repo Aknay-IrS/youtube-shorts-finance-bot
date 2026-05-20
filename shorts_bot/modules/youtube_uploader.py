@@ -15,6 +15,7 @@ import argparse
 import json
 import logging
 import os
+import pathlib
 import pickle
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -32,7 +33,7 @@ log = logging.getLogger(__name__)
 
 SCOPES          = ["https://www.googleapis.com/auth/youtube.upload",
                    "https://www.googleapis.com/auth/youtube"]
-TOKEN_FILE      = "token.json"
+TOKEN_FILE      = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "token.json")
 IST             = ZoneInfo("Asia/Kolkata")
 
 
