@@ -39,10 +39,10 @@ jobs:
         run: |
           echo '${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}' > client_secret.json
           cd shorts_bot
-          TOPIC="${{ github.event.inputs.topic }}"
           COUNT="${{ github.event.inputs.count || '1' }}"
+          TOPIC="${{ github.event.inputs.topic }}"
           if [ -n "$TOPIC" ]; then python main.py --count $COUNT --topic "$TOPIC"; else python main.py --count $COUNT; fi
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: shorts-output-${{ github.run_id }}
