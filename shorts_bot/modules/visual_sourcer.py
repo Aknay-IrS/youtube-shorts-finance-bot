@@ -10,6 +10,7 @@ import os
 import random
 import time
 
+import os
 import requests
 
 import config
@@ -17,7 +18,6 @@ import config
 log = logging.getLogger(__name__)
 
 PEXELS_VIDEO_URL = "https://api.pexels.com/videos/search"
-PEXELS_HEADERS   = {"Authorization": config.PEXELS_API_KEY}
 
 # Fallback queries if topic-specific search returns no results
 FALLBACK_QUERIES = [
@@ -48,7 +48,7 @@ def search_videos(query: str, count: int = 5) -> list[dict]:
     try:
         r = requests.get(
             PEXELS_VIDEO_URL,
-            headers=PEXELS_HEADERS,
+            headers={"Authorization": os.environ.get("PEXELS_API_KEY", config.PEXELS_API_KEY)},
             params=params,
             timeout=15,
         )
